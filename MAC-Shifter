@@ -53,7 +53,7 @@ class MacChanger:
         return logger
 
     def _load_stored_mac(self):
-        """تحميل الماك المخزن من الملف"""
+
         if os.path.exists(self.mac_store_file):
             try:
                 with open(self.mac_store_file, 'r') as f:
@@ -64,7 +64,7 @@ class MacChanger:
                 pass
 
     def _save_mac_info(self):
-        """حفظ معلومات الماك في ملف"""
+
         try:
             with open(self.mac_store_file, 'w') as f:
                 json.dump({
@@ -127,7 +127,7 @@ class MacChanger:
         self.interface = interface
         current_mac = self._get_current_mac(interface)
         
-        # حفظ الماك الأصلي لو مكنش متخزن قبل كده
+
         if not self.original_mac:
             self.original_mac = current_mac
             self._save_mac_info()
@@ -148,7 +148,7 @@ class MacChanger:
 
     def stop(self) -> None:
         if not self.original_mac or not self.interface:
-            self._load_stored_mac()  # محاولة تحميل البيانات المخزنة
+            self._load_stored_mac()  
             if not self.original_mac or not self.interface:
                 print("❌ There is no original MAC registered")
                 return
@@ -157,7 +157,7 @@ class MacChanger:
             self.logger.info(f"The original Mac has been returned{self.original_mac}")
             print(f"✅ The original Mac has been returned {self.original_mac}")
             
-            # مسح الملف بعد إرجاع الماك الأصلي
+           
             if os.path.exists(self.mac_store_file):
                 os.remove(self.mac_store_file)
         else:

@@ -1,0 +1,228 @@
+# ################ How to use : #####################################
+
+# 1- Basic Command -------------------------------------------------------
+# python network_scanner.py -t TARGET_IP
+
+
+# 2- Full Options -------------------------------------------------------
+# python network_scanner.py -t TARGET_IP -sp START_PORT -ep END_PORT -o OUTPUT_FILE
+
+# 3- Example ---------------------------------------------
+# python network_scanner.py -t 192.168.1.1 -sp 20 -ep 100 -o my_scan.json
+
+
+# ###################################################################
+
+
+
+import threading # Fast, concurrent scanning
+import sys
+from queue import Queue
+import socket
+import argparse
+from colorama import Fore, Style, init
+import json
+from datetime import datetime
+import tqdm 
+
+init(autoreset=True)
+
+
+
+
+class NetworkScanner:
+    def __init__(self):
+        self.target = ''
+        self.ports = []
+        self.results = {} 
+        self.queue = Queue()
+        self.scan_start_time = None
+        self.scan_end_time = None
+        self.progress_bar = None
+
+    def run_scan(self, target, start_port=1, end_port=1000, thread_count=100):
+        print(f"\n[+] Scanning {target}")
+  
+        self.scan_start_time = datetime.now()
+
+        self.target = target
+        
+      
+        start_port = max(1, min(start_port, 65535))
+        end_port = max(1, min(end_port, 65535))
+        if start_port > end_port:
+            start_port, end_port = end_port, start_port
+        self.ports = range(start_port, end_port + 1)
+        total_ports = len(self.ports)
+        
+      
+        self.progress_bar = tqdm.tqdm(total=total_ports, desc="Scanning ports", unit="port")
+        
+        
+        threads = []
+        for _ in range(min(thread_count, total_ports)):
+            t = threading.Thread(target=self.worker)
+            t.daemon = True # is not problem to complete if Programme Stope
+            t.start()
+            threads.append(t)
+        
+        for port in self.ports:
+            self.queue.put(port)
+            
+        for _ in range(len(threads)):
+            self.queue.put(None)
+            
+        
+        for t in threads:
+            t.join()
+            
+        self.progress_bar.close()
+        self.scan_end_time = datetime.now()
+        
+        self.display_results()
+
+
+
+
+    def worker(self):
+        while True:
+            port = self.queue.get()
+            if port is None:
+                break
+            self.scan_port(port)
+
+            self.progress_bar.update(1)
+            self.queue.task_done()
+    
+
+
+
+    def scan_port(self, port):
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # IPv4 + TCP
+            sock.settimeout(1.5)
+            result = sock.connect_ex((self.target, port))
+            if result == 0: 
+                service = "Unknown"
+                try:
+                    service = socket.getservbyport(port)
+                except:
+                    pass
+                banner = self.banner_grab(self.target, port)
+                self.results[port] = {
+                    'service': service,
+                    'banner': banner,
+                    'state': 'open'
+                }
+
+            sock.close()
+        except Exception as e:
+            self.results[port] = {
+                'service': 'Error',
+                'banner': str(e),
+                'state': 'error'
+            }
+
+
+        
+    def banner_grab(self, ip, port):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(2)
+                s.connect((ip, port))
+                banner = s.recv(1024).decode().strip()
+                return banner
+        except:
+            return "Banner not available"
+
+
+    def save_results(self, filename):
+        report = {
+            'target': self.target,
+            'scan_start': self.scan_start_time.isoformat(),
+            'scan_end': self.scan_end_time.isoformat(),
+            'ports': self.results
+        }
+
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(report, f, indent=4, ensure_ascii=False)
+            
+    
+        
+    def display_results(self):
+        if not self.results:
+            print("\n[-] No open ports found")
+            return
+            
+        print(f"\n[+] Open ports on {self.target}:")
+        print("=" * 60)
+        print("Port\tState\tService\t\tBanner")
+        print("=" * 60)
+        
+        for port in sorted(self.results.keys()):
+            info = self.results[port]
+            print(f"{port}\t{info['state']}\t{info['service']}\t\t{info['banner'][:30]}")
+        
+        print(f"\nScan completed in {self.scan_end_time - self.scan_start_time}")
+
+
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Enhanced Network Scanner')
+    parser.add_argument('-t', '--target', help='Target IP address', required=True)
+    parser.add_argument('-sp', '--start-port', type=int, help='Start port', default=1)
+    parser.add_argument('-ep', '--end-port', type=int, help='End port', default=1000)
+    parser.add_argument('-o', '--output', help='Output file for results', default='scan_results.json')
+    
+    args = parser.parse_args()
+    
+    if not socket.inet_aton(args.target):
+        print("[-] Invalid IP address")
+        return
+        
+    scanner = NetworkScanner()
+    try:
+        scanner.run_scan(args.target, args.start_port, args.end_port)
+        scanner.save_results(args.output)
+        print(f"\n[+] Results saved to {args.output}")
+    except Exception as e:
+        print(f"[-] Scan failed: {str(e)}")
+
+
+if __name__ == "__main__":
+
+    try:
+        print(f"""{Fore.CYAN + Style.BRIGHT}
+      
+▒█████   ██▓  ██   ▄▄▄       ██▓    
+▒██▒  ██▒▓██░  ██▒▒████▄    ▓██▒    
+▒██░  ██▒▓██░ ██▓▒▒██  ▀█▄  ▒██░    
+▒██   ██░▒██▄█▓▒ ▒░██▄▄▄▄██ ▒██░    
+░ ████▓▒░▒██▒ ░  ░ ▓█   ▓██▒░██████▒
+░ ▒░▒░▒░ ▒▓▒░ ░  ░ ▒▒   ▓▒█░░ ▒░▓  ░
+░ ▒ ▒░  ░▒ ░       ▒   ▒▒ ░░ ░ ▒  ░
+░ ░ ░ ▒   ░░         ░   ▒     ░ ░   
+    ░ ░                 ░  ░      ░  ░
+███████╗     ▄▄▄      ▒███████╗
+██╔════╝    ▒████▄    ▒ ▒ ▒ ▄▀░
+█████╗      ▒██  ▀█▄  ░ ▒ ▄▀▒░ 
+██╔══╝      ░██▄▄▄▄██   ▄▀▒   ░
+███████╗     ▓█   ▓██▒▒███████▒
+╚══════╝     ▒▒   ▓▒█░░▒▒ ▓░▒░▒
+                ▒   ▒▒ ░░░▒ ▒ ░ ▒
+                ░   ▒   ░ ░ ░ ░ ░
+                    ░  ░  ░ ░    
+                        ░      
+        {Style.RESET_ALL}""")
+
+        print(f"{Fore.YELLOW}[{Fore.RED}+{Fore.YELLOW}] Network Scanner Tool{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}[{Fore.BLUE}+{Fore.YELLOW}] Created by: {Fore.RED}oual.e.az{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}[{Fore.GREEN}+{Fore.YELLOW}] Version: {Fore.CYAN}1.0.0{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}={'='*48}{Style.RESET_ALL}")
+    
+        main()
+
+    except KeyboardInterrupt:
+        print("\n[-] Scan interrupted by user")
+        sys.exit(1)

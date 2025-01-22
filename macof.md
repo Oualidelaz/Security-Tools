@@ -1,3 +1,6 @@
+# Definition:
+
+**Macof** is a specialized tool for testing network security, primarily used to execute **MAC Flooding attacks** (flooding MAC addresses). This tool works by sending a massive number of fake MAC addresses to the Switch in the network, causing confusion in its MAC Address Table.
 
 # Macof Command Reference Table
 

@@ -46,3 +46,13 @@ class ClassName:
             print(f"SSH Connection failed: {e}")
             return False
 ```
+
+## Command Execution
+
+```python
+def execute_command(self, command):
+        if self.ssh_client:
+            stdin, stdout, stderr = self.ssh_client.exec_command(command)
+            return stdout.read().decode()
+        return None
+```
